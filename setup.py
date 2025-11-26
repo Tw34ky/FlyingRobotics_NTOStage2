@@ -1,6 +1,9 @@
 import sys, os, shutil
+import getpass
+
 
 aruco_map = ''
+
 def replace_string(file_path, old_string, new_string):
     """
     Заменяет строку в файле.
@@ -21,15 +24,17 @@ def replace_string(file_path, old_string, new_string):
     with open(file_path, 'w') as file:
         file.writelines(lines)  # Записываем изменения в файл
 
-if len(sys.argv) > 1:
-    if len(sys.argv) > 2:
-        directory_name = ' '.join(sys.argv[1:])
-    else:
-        directory_name = sys.argv[1]
-    user_name = directory_name.split('/')[0]
-else:
-    directory_name = 'clover/Desktop'
-    user_name = 'clover'
+# if len(sys.argv) > 1:
+#     if len(sys.argv) > 2:
+#         directory_name = ' '.join(sys.argv[1:])
+#     else:
+#         directory_name = sys.argv[1]
+#     user_name = directory_name.split('/')[0]
+# else:
+#     directory_name = 'clover/Desktop'
+#     user_name = 'clover'
+
+user_name = getpass.getuser() # ДОЛЖНО РАБОТАТЬ, ЭТО УЖЕ МОЕ ДОПОЛНЕНИЕ
 
 # Сохраняем карту ArUco в файл
 with open('Nto.txt', 'w') as file:
