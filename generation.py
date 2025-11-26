@@ -20,15 +20,19 @@ def generate_coords(line_type: str):
     """
 
     if line_type == 'line':
+        if MAIN_LINE_COUNT == 0:
+            SUM_LENGTH -= random.uniform(0, 5)
+            line_length = round(SUM_LENGTH, 2)
+            line_angle = random.randint(0, 90)
+        else: 
+            line_length = round(SUM_LENGTH, 2)
+            line_angle = random.randint(-30, 30)
 
-        line_length = round(random.uniform(5, 10), 2)
-        
-        line_angle = random.randint(0, 90)
+
         line_angle = round(line_angle * math.pi / 180, 5)
         end_coords = (line_length * math.cos(line_angle) + START_COORDS[0], line_length * math.sin(line_angle) + START_COORDS[1])
 
         cx, cy = (START_COORDS[0] + end_coords[0]) / 2, (START_COORDS[1] + end_coords[1]) / 2
-        print(START_COORDS, end_coords, line_angle)
         START_COORDS = end_coords
         line_pose = (cx, cy, HEIGHT_ABOVE_FLOOR, 0, 0, line_angle)
 
@@ -105,11 +109,11 @@ def insert_line(file_path, template):
 
     with open(file_path, 'w+') as file:
         file.write(contents)
-            
-# insert_line(f'/home/{getpass.getuser()}/catkin_ws/src/clover/clover_simulation/resources/worlds/clover_aruco.world')            
+         
 
 def main():
-    sum_length = random.randint(5, 10)
+    global SUM_LENGTH
+    SUM_LENGTH = random.randint(5, 10)
     for i in range(2):
         generate_coords('line')
 
