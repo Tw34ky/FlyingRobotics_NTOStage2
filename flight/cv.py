@@ -114,15 +114,13 @@ def get_line_boundary_points(rho, theta, width, height):
 
 def process_image_with_optimal_lines(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    binary_img = cv2.inRange(hsv, (0, 1, 1), (7, 255, 255))
+    binary_img = cv2.inRange(hsv, (50, 140, 140), (70, 255, 255))
     edges = cv2.Canny(binary_img, 50, 150, apertureSize=3)
-    lines = cv2.HoughLines(edges, 1, np.pi / 180, 45)  # Example
+    lines = cv2.HoughLines(edges, 1, np.pi / 180, 45)
 
     if lines is not None:
-        best_pair, best_area, best_ratio = find_optimal_parallel_lines(lines, binary_img)
+        best_pair, _, _ = find_optimal_parallel_lines(lines, binary_img)
 
-
-        # Draw all checked lines in blue
         checked = [lines[0]]
         for i in lines:
             for j in checked:
@@ -140,13 +138,10 @@ def process_image_with_optimal_lines(img):
                 M = cv2.moments(contour)
                 try:
                     cx = int(M['m10']/M['m00'])
-                    cy = int(M['m01']/M['m00'])
-                    if abs(cx - 120) < 40:
+                    if abs(cx - 160) < 40:
                         cv2.drawContours(no_main, [contour], 0, (0,0,0), -1)
-                        # cv2.imshow("twink radar", no_main)
-                        # cv2.waitKey(1000)
-                        print("twink obliterated")
+                        cv2.fillPoly(no_main, [contour], (0, 0, 0))
                 except ZeroDivisionError:
                     pass
         return mask, no_main, best_pair, binary_img
-        # return binary_img, best_pair
+

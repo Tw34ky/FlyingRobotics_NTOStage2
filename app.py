@@ -1,19 +1,69 @@
 from flask import Flask, render_template, jsonify, request
 import rospy
+from clover import srv
 from sensor_msgs.msg import PointCloud
+from std_msgs.msg import Bool
 from geometry_msgs.msg import PoseStamped
 import threading
 import time
+from aruco_pose.msg import MarkerArray
+import requests as rq
+import logging
+
+
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
 
 app = Flask(__name__, static_folder='static')
-
-# Shared state
+get_telemetry = rospy.ServiceProxy('get_telemetry', srv.GetTelemetry)
+navigate = rospy.ServiceProxy('navigate', srv.Navigate)
 drone_state = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
 taps = []
 mission_status = 'idle'  # idle | flying | aborted | killed
+search_status = False
+coords = []
+proc = None
+
+def navigate_wait(x=0, y=0, z=0, yaw=float('nan'), speed=0.5, frame_id='', auto_arm=False, tolerance=0.2):
+    navigate(x=x, y=y, z=z, yaw=yaw, speed=speed, frame_id=frame_id, auto_arm=auto_arm)
+
+    while not rospy.is_shutdown():
+        telem = get_telemetry(frame_id='navigate_target')
+        if math.sqrt(telem.x ** 2 + telem.y ** 2 + telem.z ** 2) < tolerance:
+            break
+        rospy.sleep(0.2)
+
+
+@app.route('/map')
+def get_map():
+    try:
+        # Wait for latest marker array
+        msg = rospy.wait_for_message('/aruco_map/map', MarkerArray, timeout=2.0)
+        markers = []
+        for marker in msg.markers:
+            x = marker.pose.position.x
+            y = marker.pose.position.y
+            z = marker.pose.position.z
+            markers.append({
+                "id": marker.id,
+                "x": x,
+                "y": y,
+                "z": z,
+                "length": marker.length  # side length of square marker
+            })
+        return jsonify({"markers": markers})
+    except Exception as e:
+        print("Error fetching map:", e)
+        return jsonify({"markers": []})
+
+
+def search_status_callback(msg):
+    global search_status
+    search_status = msg.data
+
 
 def drone_pose_callback(msg):
-    # Предполагаем, что данные приходят в frame_id='aruco_map'
     drone_state['x'] = msg.pose.position.x
     drone_state['y'] = msg.pose.position.y
     # Yaw из кватерниона
@@ -22,19 +72,15 @@ def drone_pose_callback(msg):
     _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
     drone_state['yaw'] = yaw
 
+
 def tubes_callback(msg):
-    # msg.data = [x1, y1, z1, x2, y2, z2, ...]
     global taps
-    data = msg.data
+
     new_taps = []
-    for i in range(0, len(data), 3):
-        if i+2 < len(data):
-            x, y = data[i], data[i+1]
-            # Фильтр дубликатов
-            duplicate = any(abs(x-t[0])<0.3 and abs(y-t[1])<0.3 for t in taps)
-            if not duplicate:
-                new_taps.append({'x': x, 'y': y})
-    taps.extend(new_taps)
+    for i in range(0, len(msg.points)):
+        new_taps.append({'x': msg.points[i].x, 'y': msg.points[i].y})
+    taps = new_taps
+
 
 @app.route('/')
 def index():
@@ -43,11 +89,24 @@ def index():
 # API
 @app.route('/drone')
 def get_drone():
+    global search_status
+    telem = get_telemetry(frame_id='aruco_map')
+    drone_state = {'x': telem.x, 'y': telem.y, 'yaw': telem.yaw}
+    if search_status:
+        coords.append(drone_state)
     return jsonify(drone_state)
+
+
+@app.route('/route')
+def get_route():
+    return coords
+
 
 @app.route('/taps')
 def get_taps():
+    global taps
     return jsonify(taps)
+
 
 @app.route('/status')
 def get_status():
@@ -60,43 +119,47 @@ def post_command():
     if cmd == 'start' and mission_status == 'idle':
         mission_status = 'flying'
         def run_mission():
-            import subprocess, sys
-            try:
-                subprocess.run([sys.executable, '-m', 'roslaunch', 'pipeline_monitoring', 'mission.launch'], 
-                               cwd='/path/to/your/catkin_ws',  # укажите свой путь
-                               timeout=300)
-            except:
-                pass
+            import subprocess, platform
+            plat = platform.system()
+            if plat == 'Linux' or plat == 'Darwin':
+                runner = 'python3'
+            else:
+                runner = 'python'
+            global proc
+            proc = subprocess.Popen([runner, "flight/flight.py"], shell=False)
+
             global mission_status
             if mission_status == 'flying':
                 mission_status = 'idle'
-        threading.Thread(target=run_mission, daemon=True).start()
+        run_mission()
     elif cmd == 'stop':
         try:
-            rospy.wait_for_service('/land', timeout=1)
-            from std_srvs.srv import Trigger
-            land = rospy.ServiceProxy('/land', Trigger)
-            land()
-            mission_status = 'idle'
+            proc.kill()
         except:
+            print('?')
             pass
+        navigate_wait(x=0.0, y=0.0, z=0.0, frame_id='aruco_map')
+
     elif cmd == 'kill':
         try:
-            rospy.wait_for_service('/mavros/cmd/arming', timeout=1)
             from mavros_msgs.srv import CommandBool
-            arm = rospy.ServiceProxy('/mavros/cmd/arming', CommandBool)
-            arm(False)
+            arming = rospy.ServiceProxy('mavros/cmd/arming', CommandBool)
+            set_attitude = rospy.ServiceProxy('set_attitude', srv.SetAttitude)
+            set_attitude(thrust=0)
+            arming(False)
             mission_status = 'killed'
-        except:
-            pass
+        except Exception as e:
+            print(e)
+            
     return jsonify({'status': 'ok'})
 
 def ros_listener():
-    rospy.init_node('web_bridge', anonymous=True)
-    rospy.Subscriber('/mavros/local_position/pose', PoseStamped, drone_pose_callback)
+    rospy.init_node('web_bridge', anonymous=True, disable_signals=True)
+    rospy.Subscriber('get_telemetry', PoseStamped, drone_pose_callback)
     rospy.Subscriber('/tubes', PointCloud, tubes_callback)
+    rospy.Subscriber('/pipeline_detection', Bool, search_status_callback)
     rospy.spin()
 
 if __name__ == '__main__':
     threading.Thread(target=ros_listener, daemon=True).start()
-    app.run(host='127.0.0.10', port=5000, debug=False)
+    app.run(host='127.0.10.10', port=5000, debug=False)

@@ -3,6 +3,7 @@ rospy.init_node('flight')
 import math
 import numpy as np
 from clover import srv
+from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 import requests as rq
 from geometry_msgs.msg import PointStamped
@@ -39,6 +40,7 @@ count = 0
 
 
 publisher = rospy.Publisher("tubes", PointCloud, queue_size=10)
+pub = rospy.Publisher('/pipeline_detection', Bool, queue_size=10)
 
 
 def disambiguate_lines(line):
@@ -98,6 +100,11 @@ def disambiguate_lines(line):
     
 
 
+# When pipeline detected:
+
+
+# When lost or transitioning:
+
 def navigate_wait(x=0, y=0, z=0, yaw=float('nan'), speed=0.5, frame_id='', auto_arm=False, tolerance=0.2):
     navigate(x=x, y=y, z=z, yaw=yaw, speed=speed, frame_id=frame_id, auto_arm=auto_arm)
 
@@ -107,12 +114,13 @@ def navigate_wait(x=0, y=0, z=0, yaw=float('nan'), speed=0.5, frame_id='', auto_
             break
         rospy.sleep(0.2)
 
-
+pub.publish(Bool(False))
 navigate_wait(z=1.0, frame_id='body', auto_arm=True)
 rospy.sleep(2)
 navigate_wait(x=1.0, y=1.0, z=1.0, yaw=0, frame_id='aruco_map')
-
+pub.publish(Bool(True))
 while not rospy.is_shutdown():
+    
     rospy.sleep(1)
     data = rospy.wait_for_message('/main_camera/image_raw', Image)
     img = bridge.imgmsg_to_cv2(data, 'bgr8')
@@ -120,11 +128,11 @@ while not rospy.is_shutdown():
 
     mask, binary, lines, full_binary = process_image_with_optimal_lines(img)
     kernel_3 = np.ones((3, 3), np.uint8)
-
+    kernel_5 = np.ones((5, 5), np.uint8)
     # Using cv2.erode() method a
-    binary = cv2.erode(binary, kernel_3) 
-    print(lines)
-    cv2.imshow('bin', binary)  
+    binary = cv2.erode(binary, kernel_5) 
+    binary = cv2.dilate(binary, kernel_5) 
+    cv2.imshow("bin", binary)
     contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) != 0:
         M = cv2.moments(contours[0])
@@ -147,32 +155,30 @@ while not rospy.is_shutdown():
     main_line = lines[0][0]
     main_line = disambiguate_lines(main_line)
     angle = lines[0][0][1]
-    # try:
-    #     angle = math.atan(-(1 / math.tan(angle)))
-    # except ZeroDivisionError:
-    #     pass
 
-    print(angle, end=' | ')
     if abs(min(angle, abs(2 * math.pi - angle)) - math.pi) <= 0.1:
         angle = 0
-    elif angle > 0.65:
-        angle -= math.pi
-    elif angle <= math.pi:
-        pass
+    elif angle > math.pi / 2:
+        angle = math.pi - angle
     else:
-        angle -= math.pi
-    print(angle)
+        angle = -angle
+
     if start:
+        pub.publish(Bool(True))
         navigate(x=0.0, y=0.0, z=0.0, yaw=0, frame_id='body')
         rospy.sleep(3)
     else:
-        navigate(x=0.0, y=0.0, z=0.0, yaw=-angle, frame_id='body')
+        navigate(x=0.0, y=0.0, z=0.0, yaw=angle, frame_id='body')
         rospy.sleep(3)
     
     kernel_7 = np.ones((7, 7), np.uint8)
     binary = cv2.dilate(binary, kernel_7)  
     binary = cv2.bitwise_and(binary, mask)
+
+    cv2.imshow('bin1', binary)
+    cv2.waitKey(1000)
     contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
     if len(contours) != 0:
         for contour in contours:
 
@@ -191,7 +197,6 @@ while not rospy.is_shutdown():
                                 break
 
                     if not flag:
-                        print(setpoint.point.x, setpoint.point.y, angle)
                         point_centers.append(setpoint.point)
                         points.append(setpoint.point)
                         points_msg = PointCloud()
@@ -201,16 +206,14 @@ while not rospy.is_shutdown():
                         publisher.publish(points_msg)
 
                 except ZeroDivisionError:
-                    print('ZeroDivisionError')
                     pass    
 
-    cv2.imshow("lolol", full_binary)
-    cv2.waitKey(1000)
     contours, _ = cv2.findContours(full_binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) != 0:
         x, y, w, h = cv2.boundingRect(contours[0])
         if y > 100 and not start:
-            print('MISSION IS SUPPOSED TO BE OVER', 'BINARY SEARCH')
+            print('MISSION IS SUPPOSED TO BE OVER')
+            pub.publish(Bool(False))
             break
 
     if start:
@@ -218,8 +221,8 @@ while not rospy.is_shutdown():
         continue
 
     navigate_wait(x=0.65, y=0.0, z=0.0, frame_id='body')
-    print()
 
+pub.publish(Bool(False))
 navigate_wait(x=0.0, y=0.0, z=1.0, frame_id='aruco_map', speed=2)
 navigate_wait(x=0.0, y=0.0, z=0.7, yaw=0.0, frame_id='aruco_map', speed=1, tolerance=0.1)
 

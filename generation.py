@@ -12,7 +12,77 @@ CUT_WIDTH = 0.1
 LINE_ANGLE = None
 LINE_COORDS = [] # здесь будут содержаться стартовыые и конечные координаты созданных линий 
 LINE_COORDS_UNSPLIT = []
+WORLD_FILE = '''<?xml version="1.0" ?>
+<sdf version="1.5">
+  <world name="default">
+    <!-- A global light source -->
+    <!-- <model name="carpet">
+        <static>true</static>
+        <link name="square_link">
+            <pose>1 1 0.05 0 0 0.785398</pose>
+            <visual name="square_texture">
+                <cast_shadows>false</cast_shadows>
+                <geometry>
+                    <box>
+                        <size>4.0 0.5 1e-3</size>
+                    </box>
+                </geometry>
+                <material>
+                    <script>
+                        <uri>model://square_line/materials/scripts</uri>
+                        <uri>model://square_line/materials/textures</uri>
+                        <name>square_solid</name>
+                    </script>
+                </material>
+            </visual>
+        </link>
+    </model> -->      
+    
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <include>
+      <uri>model://parquet_plane</uri>
+      <pose>0 0 -0.01 0 0 0</pose>
+    </include>
+    
+    <include>
+      <uri>model://aruco_cmit_txt</uri>
+    </include>
 
+    <scene>
+      <ambient>0.8 0.8 0.8 1</ambient>
+      <background>0.8 0.9 1 1</background>
+      <shadows>false</shadows>
+      <grid>false</grid>
+      <origin_visual>false</origin_visual>
+    </scene>
+  
+    <physics name='default_physics' default='0' type='ode'>
+      <gravity>0 0 -9.8066</gravity>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>10</iters>
+          <sor>1.3</sor>
+          <use_dynamic_moi_rescaling>0</use_dynamic_moi_rescaling>
+        </solver>
+        <constraints>
+          <cfm>0</cfm>
+          <erp>0.2</erp>
+          <contact_max_correcting_vel>100</contact_max_correcting_vel>
+          <contact_surface_layer>0.001</contact_surface_layer>
+        </constraints>
+      </ode>
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+      <magnetic_field>6.0e-6 2.3e-5 -4.2e-5</magnetic_field>
+    </physics>
+  </world>
+</sdf>
+
+'''
 
 def generate_pipeline_insertions(line_coords, num_insertions=5, min_distance=0.75, branch_length=2.0):
     """
@@ -169,17 +239,11 @@ def generate_pipeline_insertions(line_coords, num_insertions=5, min_distance=0.7
         
         main_angle = calculate_angle(segments[segment_index])
         
-        branch_direction = -1  # -1 для левого, 1 для правого ответвления
+        branch_direction = random.choice([-1, 1])  # -1 для левого, 1 для правого ответвления
         branch_angle = main_angle + branch_direction * math.pi / 2
         
         branch_end_x = insertion_point[0] + branch_length * math.cos(branch_angle)
         branch_end_y = insertion_point[1] + branch_length * math.sin(branch_angle)
-        if branch_end_x not in range(0, 10) or branch_end_y not in range(0, 10):
-            branch_direction = 1  
-            branch_angle = main_angle + branch_direction * math.pi / 2
-        
-            branch_end_x = insertion_point[0] + branch_length * math.cos(branch_angle)
-            branch_end_y = insertion_point[1] + branch_length * math.sin(branch_angle)
         
         center_x = (insertion_point[0] + branch_end_x) / 2
         center_y = (insertion_point[1] + branch_end_y) / 2
@@ -227,7 +291,7 @@ def generate_coords():
         START_COORDS = end_coords
         line_pose = (cx, cy, HEIGHT_ABOVE_FLOOR, 0, 0, round(line_angle * math.pi / 180, 5))
 
-        line_size = (line_length + 0.2, LINE_WIDTH, 0.001)
+        line_size = (line_length + 0.1, LINE_WIDTH, 0.001)
         place_line(line_pose, line_size)
         MAIN_LINE_COUNT += 1
 
@@ -268,40 +332,38 @@ def place_line(pose: Tuple, size: Tuple):
     </model>
     """
     PLACE_COUNT_GENERAL += 1
-    abs_path = f'/home/{getpass.getuser()}/catkin_ws/src/clover/clover_simulation/resources/worlds/clover_aruco.world'
-    insert_line(abs_path, template)
+    insert_line(template)
     
 
-def insert_line(file_path, template):
-
+def insert_line(template):
+    global WORLD_FILE
     """
     
     Читает кфг файл мира, добавляет в него линии, function's name is kind of self-explanatory
 
     """
 
-    with open(file_path, 'r+') as file:
-        offsets = []
-        offset = 0
-        contents = ''
-        for index, content in enumerate(file.readlines()):
-            if '<include>' in content:
-                break
-            offsets.append(offset)
-            offset += len(content)
-            contents += content
-        saved_index = index
+    offsets = []
+    offset = 0
+    contents = ''
+    for index, content in enumerate(WORLD_FILE.split('\n')):
+        if '<include>' in content:
+            break
+        offsets.append(offset)
+        offset += len(content)
+        contents += content 
         contents += '\n'
-        contents += template
-        contents += '\n'
-    with open(file_path, 'r+') as file:
-        for index, content in enumerate(file.readlines()[saved_index::]):
-            offsets.append(offset)
-            offset += len(content)
-            contents += content
-
-    with open(file_path, 'w+') as file:
-        file.write(contents)
+    saved_index = index
+    contents += '\n'
+    contents += template
+    contents += '\n'
+    
+    for index, content in enumerate(WORLD_FILE.split('\n')[saved_index::]):
+        offsets.append(offset)
+        offset += len(content)
+        contents += content
+    WORLD_FILE = contents
+    
          
 
 def main():
@@ -318,7 +380,9 @@ def main():
         length, width, thick = inst['branch_length'], CUT_WIDTH, 0.001
 
         place_line((x, y, z, roll, pitch, yaw), (length, width, thick))
-
+    file_path = f'/home/{getpass.getuser()}/catkin_ws/src/clover/clover_simulation/resources/worlds/clover_aruco.world'
+    with open(file_path, 'w+') as file:
+        file.write(WORLD_FILE)
 
 if __name__ == '__main__':
     main()
