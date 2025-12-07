@@ -14,21 +14,9 @@ import cv2
 from cv import process_image_with_optimal_lines
 from img_to_coords import cnt_center
 
-# fourcc = cv2.VideoWriter_fourcc(*'XVID')
-# fourcc2 = cv2.VideoWriter_fourcc(*'XVID')
 
-# out_main = cv2.VideoWriter('main_camera.avi', fourcc, 30.0, (320,240))
-# out_thermal = cv2.VideoWriter('thermal.avi', fourcc2, 25.0, (256,192))
 bridge = CvBridge()
 
-# @long_callback
-# def image_callback(data):
-#     img = bridge.imgmsg_to_cv2(data, 'bgr8')  # OpenCV image
-
-# @long_callback
-# def thermal_callback(data):
-#     img = bridge.imgmsg_to_cv2(data, 'bgr8')  # OpenCV image
-#     out_thermal.write(img)
 
 get_telemetry = rospy.ServiceProxy('get_telemetry', srv.GetTelemetry)
 navigate = rospy.ServiceProxy('navigate', srv.Navigate)
@@ -50,9 +38,64 @@ start = True
 count = 0
 
 
-# def heat_pipe() -> dict:
-#     data = rq.get()
 publisher = rospy.Publisher("tubes", PointCloud, queue_size=10)
+
+
+def disambiguate_lines(line):
+    """
+    Disambiguate line direction based on image context and expected orientation.
+    """
+
+    rho, theta = line
+    
+    # Convert theta to degrees
+    angle_degrees = np.degrees(theta) % 180
+    
+    # Adjust to -90 to 90 range for easier handling
+    if angle_degrees > 90:
+        angle_degrees -= 180
+    
+    # Calculate line endpoints for spatial analysis
+    a = np.cos(theta)
+    b = np.sin(theta)
+    x0 = a * rho
+    y0 = b * rho
+    
+    # Calculate two points on the line (top and bottom of image)
+    height = 240  # Assuming standard image height
+    x1 = int(x0 + height * (-b))
+    y1 = int(y0 + height * (a))
+    x2 = int(x0 - height * (-b))
+    y2 = int(y0 - height * (a))
+    
+    # Determine which endpoint is left/right based on x-coordinate
+    left_x = x1 if x1 < x2 else x2
+    right_x = x1 if x1 > x2 else x2
+    
+    # Calculate line direction based on spatial arrangement
+    # If left endpoint is higher than right endpoint, line goes upward left-to-right
+    left_y = y1 if x1 < x2 else y2
+    right_y = y1 if x1 > x2 else y2
+    
+    # Determine the actual direction based on endpoint positions
+    if left_y > right_y:  # Line goes downward left-to-right
+        actual_direction = angle_degrees
+    else:  # Line goes upward left-to-right
+        # Flip the direction by 180 degrees
+        actual_direction = angle_degrees + 180
+        if actual_direction > 90:
+            actual_direction -= 180
+    
+    # Ensure direction is within expected range (-30 to 30)
+    if actual_direction < -30:
+        actual_direction += 180
+    elif actual_direction > 30:
+        actual_direction -= 180
+    
+    # Only keep lines that are within expected direction range
+    if -30 <= actual_direction <= 30:
+        return rho, np.radians(actual_direction)
+    
 
 
 def navigate_wait(x=0, y=0, z=0, yaw=float('nan'), speed=0.5, frame_id='', auto_arm=False, tolerance=0.2):
@@ -89,17 +132,11 @@ while not rospy.is_shutdown():
             cx = int(M['m10']/M['m00'])
             cy = int(M['m01']/M['m00'])
             setpoint, px, py = cnt_center(cx, cy, data)
-            # if cy > 180:
-            #     print('MISSION IS SUPPOSED TO BE OVER')
-            #     break
-            # print(setpoint.point.x, setpoint.point.y)
-            if start:
-                # navigate_wait(x=-0.5, y=-0.5, z=0.0, yaw=angle, frame_id='body', tolerance=0.1)
 
-                telem = get_telemetry(frame_id='aruco_map')
+            if start:
+                telem = get_telemetry(frame_id='aruco_map') 
                 angle = math.atan2(setpoint.point.y - telem.y, setpoint.point.x - telem.x)
-                # angle += math.pi * 1.5
-                # print(angle)
+                
                 navigate_wait(x=setpoint.point.x, y=setpoint.point.y, z=1.0, yaw=angle, frame_id='aruco_map', tolerance=0.1)
                 angle = 0
 
@@ -107,45 +144,31 @@ while not rospy.is_shutdown():
         except ZeroDivisionError:
             pass
 
-    contours, _ = cv2.findContours(full_binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    if len(contours) != 0:
-        M = cv2.moments(contours[0])
-        x, y, w, h = cv2.boundingRect(contours[0])
-        if y > 100:
-            print('MISSION IS SUPPOSED TO BE OVER', 'BINARY SEARCH')
-            break
-        # try:
-        #     cx = int(M['m10']/M['m00'])
-        #     cy = int(M['m01']/M['m00'])
-        #     setpoint, px, py = cnt_center(cx, cy, data)
-        #     if cy > 190:
-        #         print('MISSION IS SUPPOSED TO BE OVER', 'BINARY SEARCH')
-        #         break
-        # except ZeroDivisionError:
-        #     pass    
-
-
+    main_line = lines[0][0]
+    main_line = disambiguate_lines(main_line)
     angle = lines[0][0][1]
+    # try:
+    #     angle = math.atan(-(1 / math.tan(angle)))
+    # except ZeroDivisionError:
+    #     pass
 
-    print(angle)
+    print(angle, end=' | ')
     if abs(min(angle, abs(2 * math.pi - angle)) - math.pi) <= 0.2:
         angle = 0
-    elif angle > 0.5:
+    elif angle > 0.65:
         angle -= math.pi
     elif angle <= math.pi:
         pass
     else:
         angle -= math.pi
-
+    print(angle)
     if start:
         navigate(x=0.0, y=0.0, z=0.0, yaw=0, frame_id='body')
         rospy.sleep(3)
     else:
         navigate(x=0.0, y=0.0, z=0.0, yaw=-angle, frame_id='body')
         rospy.sleep(3)
-
-    # contours_align, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)    
-
+    
     kernel_7 = np.ones((7, 7), np.uint8)
     binary = cv2.dilate(binary, kernel_7)  
     binary = cv2.bitwise_and(binary, mask)
@@ -155,12 +178,10 @@ while not rospy.is_shutdown():
 
             M = cv2.moments(contour)
             x, y, w, h = cv2.boundingRect(contour)
-            if w <= h: # and 0.01 < h / w < 0.1:
+            if w <= h:
                 try:
                     cx = int(M['m10']/M['m00'])
                     cy = int(M['m01']/M['m00'])
-                    # cx += min(lines[0][0][0] - cx, lines[1][0][0] - cx, key=abs)
-                    print(w / h, h / w)
                     setpoint, px, py = cnt_center(cx, cy, data)
                     flag = False
                     if len(points) != 0:
@@ -179,28 +200,28 @@ while not rospy.is_shutdown():
                         points_msg.points = points
                         publisher.publish(points_msg)
 
-
-                        # cv2.drawContours(img, contours, 0, (255,255,0), 2, cv2.LINE_AA)
-                        # cv2.circle(img, center=(int(cx), cy), radius=5, color=(255, 0, 255), thickness=-1)
                 except ZeroDivisionError:
                     print('ZeroDivisionError')
                     pass    
 
-    cv2.imshow("lolol", binary)
+    cv2.imshow("lolol", full_binary)
     cv2.waitKey(1000)
+    contours, _ = cv2.findContours(full_binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) != 0:
+        x, y, w, h = cv2.boundingRect(contours[0])
+        if y > 100 and not start:
+            print('MISSION IS SUPPOSED TO BE OVER', 'BINARY SEARCH')
+            break
+
     if start:
         start = False
         continue
+
     navigate_wait(x=0.8, y=0.0, z=0.0, frame_id='body')
     print()
 
-# image_sub = rospy.Subscriber('/main_camera/image_raw', Image, image_callback)
-# thermal_sub = rospy.Subscriber('/cv/debug', Image, thermal_callback)
-# rospy.sleep(5)
 navigate_wait(x=0.0, y=0.0, z=1.0, frame_id='aruco_map', speed=2)
 navigate_wait(x=0.0, y=0.0, z=0.7, yaw=0.0, frame_id='aruco_map', speed=1, tolerance=0.1)
 
 land()
 rospy.sleep(5)
-
-# rospy.spin()

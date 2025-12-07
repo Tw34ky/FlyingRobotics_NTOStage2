@@ -6,5 +6,189 @@
     <meta charset="UTF-8">
 </head>
 <body>
-
+    <div class="header">
+      <h2>🛰️ Мониторинг нефтепровода — ArUco 10×10</h2>
+      <div class="controls">
+        <button id="start" class="btn-start" onclick="startMission()">▶️ Старт</button>
+        <button id="stop" class="btn-stop" onclick="stopMission()">⏹️ Стоп</button>
+        <button id="kill" class="btn-kill" onclick="kill()">💀 Kill</button>
+        <span id="status" class="status">Статус: idle</span>
+      </div>
+    </div>
+    
+    <div id="map-container">
+      <canvas id="map" width="550" height="550"></canvas>
+    </div>
+    
+    <div class="legend">
+      <div class="legend-item"><span class="legend-color drone-color"></span> Дрон</div>
+      <div class="legend-item"><span class="legend-color tap-color"></span> Врезка</div>
+      <div class="legend-item"><span class="legend-color marker-color"></span> ArUco-маркер</div>
+      <div class="legend-item">Шаг сетки: 1 м</div>
+    </div>
+    
+    <h3>Найденные врезки:</h3>
+    <ul id="taps-list"></ul>
+    
+    <script>
+    // Настройки
+    const MAP_SIZE_M = 10;           // 10×10 м
+    const PX_PER_M = 50;             // масштаб: 1 м = 50 px
+    const OFFSET_X = 25;             // отступ слева/сверху (для маркеров у края)
+    const OFFSET_Y = 25;
+    
+    let drone = { x: 0, y: 0, yaw: 0 };
+    let taps = [];                   // [{x, y}, ...]
+    let status = 'idle';
+    
+    const canvas = document.getElementById('map');
+    const ctx = canvas.getContext('2d');
+    
+    // --- Отрисовка карты ---
+    function drawMap() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+      // Сетка ArUco (1 м шаг)
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= MAP_SIZE_M; i++) {
+        const x = OFFSET_X + i * PX_PER_M;
+        const y0 = OFFSET_Y;
+        const y1 = OFFSET_Y + MAP_SIZE_M * PX_PER_M;
+        ctx.beginPath();
+        ctx.moveTo(x, y0); ctx.lineTo(x, y1);
+        ctx.moveTo(y0, x); ctx.lineTo(y1, x); // да, так — для квадратной сетки
+        ctx.stroke();
+      }
+    
+      // ArUco-маркеры (в узлах)
+      ctx.fillStyle = '#6c757d';
+      ctx.font = '10px Arial';
+      for (let i = 0; i < 10; i++) {
+        for (let j = 0; j < 10; j++) {
+          const cx = OFFSET_X + i * PX_PER_M;
+          const cy = OFFSET_Y + j * PX_PER_M;
+          ctx.fillRect(cx - 2, cy - 2, 4, 4);
+          // ctx.fillText(`(${i},${j})`, cx + 4, cy - 4); // опционально
+        }
+      }
+    
+      // Врезки
+      ctx.fillStyle = '#dc3545';
+      taps.forEach(t => {
+        const x = OFFSET_X + t.x * PX_PER_M;
+        const y = OFFSET_Y + (MAP_SIZE_M - t.y) * PX_PER_M; // инверсия Y: 0 внизу
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+    
+      // Дрон (треугольник, ориентированный по yaw)
+      const dx = OFFSET_X + drone.x * PX_PER_M;
+      const dy = OFFSET_Y + (MAP_SIZE_M - drone.y) * PX_PER_M;
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.rotate(drone.yaw);
+      ctx.fillStyle = '#007bff';
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(-6, 8);
+      ctx.lineTo(6, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    
+      // Подписи осей
+      ctx.fillStyle = '#333';
+      ctx.font = '12px Arial';
+      ctx.fillText('X →', OFFSET_X + MAP_SIZE_M * PX_PER_M + 10, OFFSET_Y + MAP_SIZE_M * PX_PER_M + 15);
+      ctx.save();
+      ctx.translate(10, OFFSET_Y + MAP_SIZE_M * PX_PER_M + 10);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('Y ↑', 0, 0);
+      ctx.restore();
+    }
+    
+    // --- Запросы к серверу ---
+    async function fetchDrone() {
+      try {
+        const res = await fetch('/drone');
+        const data = await res.json();
+        drone = { x: data.x || 0, y: data.y || 0, yaw: data.yaw || 0 };
+      } catch (e) {
+        console.warn('Не удалось получить позицию дрона');
+      }
+    }
+    
+    async function fetchTaps() {
+      try {
+        const res = await fetch('/taps');
+        const data = await res.json(); // [{x:1.2, y:1.5}, ...]
+        taps = data;
+      } catch (e) {
+        console.warn('Не удалось получить список врезок');
+      }
+    }
+    
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        status = data.status || 'unknown';
+        document.getElementById('status').innerText = `Статус: ${status}`;
+        document.getElementById('status').className = `status status-${status}`;
+        const startBtn = document.getElementById('start');
+        startBtn.disabled = (status === 'flying');
+      } catch (e) {
+        console.warn('Не удалось получить статус');
+      }
+    }
+    
+    // --- Обновление ---
+    function update() {
+      Promise.all([fetchDrone(), fetchTaps(), fetchStatus()]).then(() => {
+        drawMap();
+        updateTapsList();
+      });
+    }
+    
+    function updateTapsList() {
+      const list = document.getElementById('taps-list');
+      list.innerHTML = taps.length === 0
+        ? '<li>Врезки не обнаружены</li>'
+        : taps.map((t, i) => `<li><strong>#${i+1}</strong>: (${t.x.toFixed(2)}, ${t.y.toFixed(2)}) м</li>`).join('');
+    }
+    
+    // --- Управление ---
+    async function sendCommand(cmd) {
+      try {
+        await fetch('/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd })
+        });
+      } catch (e) {
+        alert('Ошибка отправки команды');
+      }
+    }
+    function startMission() { sendCommand('start'); }
+    function stopMission()  { sendCommand('stop'); }
+    function kill()         { sendCommand('kill'); }
+    
+    // --- Инициализация ---
+    drawMap();
+    setInterval(update, 300); // 3 раза в секунду
+    
+    // Поддержка масштабирования колесом (опционально)
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      // простой zoom: обновить PX_PER_M (реализуйте при необходимости)
+    }, { passive: false });
+    </script>
+    
 </body>
+</html>
