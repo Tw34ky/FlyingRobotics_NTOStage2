@@ -153,7 +153,7 @@ while not rospy.is_shutdown():
     #     pass
 
     print(angle, end=' | ')
-    if abs(min(angle, abs(2 * math.pi - angle)) - math.pi) <= 0.2:
+    if abs(min(angle, abs(2 * math.pi - angle)) - math.pi) <= 0.1:
         angle = 0
     elif angle > 0.65:
         angle -= math.pi
@@ -190,7 +190,7 @@ while not rospy.is_shutdown():
                                 flag = True
                                 break
 
-                    if not flag and angle < 0.1:
+                    if not flag:
                         print(setpoint.point.x, setpoint.point.y, angle)
                         point_centers.append(setpoint.point)
                         points.append(setpoint.point)
@@ -217,7 +217,7 @@ while not rospy.is_shutdown():
         start = False
         continue
 
-    navigate_wait(x=0.8, y=0.0, z=0.0, frame_id='body')
+    navigate_wait(x=0.65, y=0.0, z=0.0, frame_id='body')
     print()
 
 navigate_wait(x=0.0, y=0.0, z=1.0, frame_id='aruco_map', speed=2)
