@@ -24,20 +24,6 @@ else:
     directory_name = 'clover/Desktop'
     user_name = 'clover'
 
-# Проверка наличия моделей в директории .gazebo
-# if 'models' in os.listdir(f"/home/{user_name}/.gazebo/"):
-#     for model in os.listdir(f"/home/{user_name}/.gazebo/models"):
-#         if model in ['aruco_Nto_txt', 'dronepoint_blue', 'dronepoint_green', 'dronepoint_red', 'dronepoint_yellow']:
-#             shutil.rmtree(f"/home/{user_name}/.gazebo/models/{model}")
-#             continue
-#     for model_folder in os.listdir(f"/home/{directory_name}/II_stage_KZ/models"):
-#         shutil.copytree(f'/home/{directory_name}/II_stage_KZ/models/{model_folder}',
-#                        f"/home/{user_name}/.gazebo/models/{model_folder}",
-#                        dirs_exist_ok=True)
-# else:
-#     shutil.copytree(f'/home/{directory_name}/II_stage_KZ/models',
-#                    f"/home/{user_name}/.gazebo/models")
-
 # Изменение строк в launch файле для запуска ArUco
 replace_string(f'/home/{user_name}/catkin_ws/src/clover/clover/launch/aruco.launch',
                '<arg name="aruco_detect"',
@@ -145,3 +131,12 @@ replace_string(f'/home/{user_name}/catkin_ws/src/clover/clover_simulation/launch
 replace_string(f'/home/{user_name}/catkin_ws/src/clover/clover_simulation/launch/simulator.launch',
                '<arg name="verbose"',
                ' <arg name="verbose" value="true"/>')
+
+import texture
+
+texture.main()
+
+
+import generation
+
+generation.main()

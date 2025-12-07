@@ -116,7 +116,7 @@ def get_status():
 def post_command():
     global mission_status
     cmd = request.json.get('command')
-    if cmd == 'start' and mission_status == 'idle':
+    if cmd == 'start' and mission_status != 'flying':
         mission_status = 'flying'
         def run_mission():
             import subprocess, platform
@@ -129,8 +129,6 @@ def post_command():
             proc = subprocess.Popen([runner, "flight/flight.py"], shell=False)
 
             global mission_status
-            if mission_status == 'flying':
-                mission_status = 'idle'
         run_mission()
     elif cmd == 'stop':
         try:

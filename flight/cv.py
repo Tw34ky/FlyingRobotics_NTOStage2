@@ -140,8 +140,10 @@ def process_image_with_optimal_lines(img):
                     cx = int(M['m10']/M['m00'])
                     if abs(cx - 160) < 40:
                         cv2.drawContours(no_main, [contour], 0, (0,0,0), -1)
+                        cv2.drawContours(img, [contour], 0, (0,0,0), -1)
                         cv2.fillPoly(no_main, [contour], (0, 0, 0))
                 except ZeroDivisionError:
                     pass
+
         return mask, no_main, best_pair, binary_img
 

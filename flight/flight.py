@@ -34,7 +34,7 @@ land = rospy.ServiceProxy('land', Trigger)
 last_coords = []
 points = []
 point_centers = []
-TOLERANCE = 0.5
+TOLERANCE = 0.65
 start = True
 count = 0
 
@@ -132,7 +132,6 @@ while not rospy.is_shutdown():
     # Using cv2.erode() method a
     binary = cv2.erode(binary, kernel_5) 
     binary = cv2.dilate(binary, kernel_5) 
-    cv2.imshow("bin", binary)
     contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) != 0:
         M = cv2.moments(contours[0])
@@ -156,9 +155,9 @@ while not rospy.is_shutdown():
     main_line = disambiguate_lines(main_line)
     angle = lines[0][0][1]
 
-    if abs(min(angle, abs(2 * math.pi - angle)) - math.pi) <= 0.1:
-        angle = 0
-    elif angle > math.pi / 2:
+    # if abs(min(angle, abs(2 * math.pi - angle)) - math.pi) <= 0.1:
+    #     angle = 0
+    if angle > math.pi / 2:
         angle = math.pi - angle
     else:
         angle = -angle
@@ -175,8 +174,6 @@ while not rospy.is_shutdown():
     binary = cv2.dilate(binary, kernel_7)  
     binary = cv2.bitwise_and(binary, mask)
 
-    cv2.imshow('bin1', binary)
-    cv2.waitKey(1000)
     contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     if len(contours) != 0:
@@ -199,6 +196,7 @@ while not rospy.is_shutdown():
                     if not flag:
                         point_centers.append(setpoint.point)
                         points.append(setpoint.point)
+                        print(setpoint.point)
                         points_msg = PointCloud()
                         points_msg.header.frame_id = "aruco_map"
                         points_msg.header.stamp = rospy.Time.now()

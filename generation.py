@@ -384,5 +384,4 @@ def main():
     with open(file_path, 'w+') as file:
         file.write(WORLD_FILE)
 
-if __name__ == '__main__':
-    main()
+
