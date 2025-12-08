@@ -1,5 +1,5 @@
 # FlyingRobotics_NTOStage2
-
+## Контакт - [@asc3nsionism](https://t.me/asc3nsionism)
 ## Инструкция по запуску
 - 1)	Зайдя в терминал, склонируйте репозиторий Tw34ky/FlyingRobotics_NTOStage2 командой “```git clone https://github.com/Tw34ky/FlyingRobotics_NTOStage2.git```”
 - 2)	Перейдите в директорию FlyingRobotics_NTOStage2 (“```cd FlyingRobotics_NTOStage2```”)
