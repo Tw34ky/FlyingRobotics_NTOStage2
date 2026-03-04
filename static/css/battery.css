@@ -1,0 +1,113 @@
+/* === 🔋 Battery Indicator === */
+.battery-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: rgba(26, 26, 46, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.battery-icon {
+    position: relative;
+    width: 42px;
+    height: 20px;
+    border: 2px solid currentColor;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    box-sizing: content-box;
+}
+
+.battery-icon::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 10px;
+    background: currentColor;
+    border-radius: 0 2px 2px 0;
+}
+
+.battery-level {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease, background 0.3s ease;
+    background: linear-gradient(90deg, #00b894, #00cec9);
+}
+
+.battery-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 70px;
+}
+
+.battery-percent {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.battery-voltage {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    color: #a0a0c0;
+}
+
+/* Цветовые состояния батареи */
+.battery-good .battery-icon,
+.battery-good .battery-percent { color: #00b894; }
+.battery-good .battery-level { 
+    background: linear-gradient(90deg, #00b894, #00cec9);
+    box-shadow: 0 0 12px rgba(0, 184, 148, 0.4);
+}
+
+.battery-medium .battery-icon,
+.battery-medium .battery-percent { color: #fdcb6e; }
+.battery-medium .battery-level { 
+    background: linear-gradient(90deg, #fdcb6e, #f39c12);
+    box-shadow: 0 0 12px rgba(253, 203, 110, 0.4);
+}
+
+.battery-low .battery-icon,
+.battery-low .battery-percent { color: #ff7675; }
+.battery-low .battery-level { 
+    background: linear-gradient(90deg, #ff7675, #d63031);
+    box-shadow: 0 0 15px rgba(255, 118, 117, 0.6);
+    animation: pulse-battery 1.5s ease-in-out infinite;
+}
+
+.battery-critical .battery-icon,
+.battery-critical .battery-percent { color: #d63031; }
+.battery-critical .battery-level { 
+    background: linear-gradient(90deg, #d63031, #6c001a);
+    box-shadow: 0 0 20px rgba(214, 48, 49, 0.8);
+    animation: pulse-battery 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse-battery {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .battery-container {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+    }
+    .battery-icon {
+        width: 36px;
+        height: 18px;
+    }
+    .battery-percent { font-size: 0.9rem; }
+    .battery-voltage { font-size: 0.7rem; }
+}

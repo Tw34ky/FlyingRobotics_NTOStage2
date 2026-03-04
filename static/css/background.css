@@ -1,0 +1,58 @@
+/* === 🌈 Rainbow Background — СТАТИЧНАЯ ВЕРСИЯ === */
+body {
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    background: #0f0f1a;
+    position: relative;
+}
+
+.rainbow {
+    height: 100vh;
+    width: 0;
+    top: 0;
+    position: absolute;
+    transform: rotate(10deg);
+    transform-origin: top right;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.5; /* чуть приглушённый для экономии GPU */
+}
+
+/* 10 статичных линий с разными позициями (right) и цветами */
+.rainbow:nth-child(1)  { right: 5%;  box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(96, 165, 250), 0 0 50px 25px rgb(94, 234, 212), 50px 0 50px 25px rgb(232, 121, 249), 130px 0 80px 40px white; }
+.rainbow:nth-child(2)  { right: 15%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(232, 121, 249), 0 0 50px 25px rgb(96, 165, 250), 50px 0 50px 25px rgb(94, 234, 212), 130px 0 80px 40px white; }
+.rainbow:nth-child(3)  { right: 25%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(94, 234, 212), 0 0 50px 25px rgb(232, 121, 249), 50px 0 50px 25px rgb(96, 165, 250), 130px 0 80px 40px white; }
+.rainbow:nth-child(4)  { right: 35%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(96, 165, 250), 0 0 50px 25px rgb(232, 121, 249), 50px 0 50px 25px rgb(94, 234, 212), 130px 0 80px 40px white; }
+.rainbow:nth-child(5)  { right: 45%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(232, 121, 249), 0 0 50px 25px rgb(94, 234, 212), 50px 0 50px 25px rgb(96, 165, 250), 130px 0 80px 40px white; }
+.rainbow:nth-child(6)  { right: 55%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(94, 234, 212), 0 0 50px 25px rgb(96, 165, 250), 50px 0 50px 25px rgb(232, 121, 249), 130px 0 80px 40px white; }
+.rainbow:nth-child(7)  { right: 65%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(96, 165, 250), 0 0 50px 25px rgb(94, 234, 212), 50px 0 50px 25px rgb(232, 121, 249), 130px 0 80px 40px white; }
+.rainbow:nth-child(8)  { right: 75%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(232, 121, 249), 0 0 50px 25px rgb(96, 165, 250), 50px 0 50px 25px rgb(94, 234, 212), 130px 0 80px 40px white; }
+.rainbow:nth-child(9)  { right: 85%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(94, 234, 212), 0 0 50px 25px rgb(232, 121, 249), 50px 0 50px 25px rgb(96, 165, 250), 130px 0 80px 40px white; }
+.rainbow:nth-child(10) { right: 95%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(96, 165, 250), 0 0 50px 25px rgb(232, 121, 249), 50px 0 50px 25px rgb(94, 234, 212), 130px 0 80px 40px white; }
+
+.rainbow:nth-child(11)  { right: 5%;  box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(96, 165, 250), 0 0 50px 25px rgb(94, 234, 212), 50px 0 50px 25px rgb(232, 121, 249), 130px 0 80px 40px white; }
+.rainbow:nth-child(12)  { right: 15%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(232, 121, 249), 0 0 50px 25px rgb(96, 165, 250), 50px 0 50px 25px rgb(94, 234, 212), 130px 0 80px 40px white; }
+.rainbow:nth-child(13)  { right: 25%; box-shadow: -130px 0 80px 40px white, -50px 0 50px 25px rgb(94, 234, 212), 0 0 50px 25px rgb(232, 121, 249), 50px 0 50px 25px rgb(96, 165, 250), 130px 0 80px 40px white; }
+
+
+.h, .v {
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.3; /* ещё мягче для статики */
+}
+.h { 
+    box-shadow: 0 0 50vh 40vh rgba(255,255,255,0.1); 
+    width: 100vw; 
+    height: 0; 
+    bottom: 0; 
+    left: 0; 
+}
+.v { 
+    box-shadow: 0 0 35vw 25vw rgba(255,255,255,0.08); 
+    width: 0; 
+    height: 100vh; 
+    bottom: 0; 
+    left: 0; 
+}

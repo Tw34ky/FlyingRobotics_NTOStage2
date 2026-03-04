@@ -11,6 +11,7 @@ from aruco_pose.msg import MarkerArray
 import requests as rq
 import logging
 import platform
+from cloverAPI import CloverAPI
 
 
 plat = platform.system()
@@ -42,6 +43,25 @@ def navigate_wait(x=0, y=0, z=0, yaw=float('nan'), speed=0.5, frame_id='', auto_
         if math.sqrt(telem.x ** 2 + telem.y ** 2 + telem.z ** 2) < tolerance:
             break
         rospy.sleep(0.2)
+
+
+@app.before_request
+def get_clover_instance():
+    global clover
+    clover = CloverAPI()
+
+
+# @app.route('/state', methods=['GET'])
+# def get_state():
+#     try:
+#         bat = clover.get_battery_state()
+#         # mavros = clover.get_state()
+#         return jsonify({
+#             "voltage": bat.voltage, 
+#             "percentage": bat.percentage
+#         })
+#     except rospy.ROSException as e:
+#         return jsonify({"error": str(e)}), 500
 
 
 @app.route('/map')
