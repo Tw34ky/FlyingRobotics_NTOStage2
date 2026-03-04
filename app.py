@@ -5,10 +5,19 @@ from sensor_msgs.msg import PointCloud
 from std_msgs.msg import Bool
 from geometry_msgs.msg import PoseStamped
 import threading
-import time
+import subprocess
+import time, math
 from aruco_pose.msg import MarkerArray
 import requests as rq
 import logging
+import platform
+
+
+plat = platform.system()
+if plat == 'Linux' or plat == 'Darwin':
+    runner = 'python3'
+else:
+    runner = 'python'
 
 
 log = logging.getLogger('werkzeug')
@@ -112,31 +121,33 @@ def get_taps():
 def get_status():
     return jsonify({'status': mission_status})
 
+
 @app.route('/command', methods=['POST'])
 def post_command():
     global mission_status
     cmd = request.json.get('command')
     if cmd == 'start' and mission_status != 'flying':
         mission_status = 'flying'
-        def run_mission():
-            import subprocess, platform
-            plat = platform.system()
-            if plat == 'Linux' or plat == 'Darwin':
-                runner = 'python3'
-            else:
-                runner = 'python'
-            global proc
-            proc = subprocess.Popen([runner, "flight/flight.py"], shell=False)
+        # def run_mission():
+        
+        global proc, runner
+        proc = subprocess.Popen([runner, "flight/flight.py"], shell=False)
+        # run_mission()
 
-            global mission_status
-        run_mission()
     elif cmd == 'stop':
         try:
-            proc.kill()
-        except:
-            print('?')
+            if proc is not None:  # Проверяем, существует ли процесс
+                proc.kill()
+                proc = None       # Сбрасываем ссылку
+        except Exception as e:
+            print(f"Error stopping process: {e}")
             pass
+        
+        # Возвращаем дрон на базу
         navigate_wait(x=0.0, y=0.0, z=0.0, frame_id='aruco_map')
+        # Статус изменится на 'idle' автоматически через monitor_process, 
+        # но можно продублировать и здесь для мгновенной реакции UI
+        mission_status = 'idle' 
 
     elif cmd == 'kill':
         try:
@@ -158,6 +169,24 @@ def ros_listener():
     rospy.Subscriber('/pipeline_detection', Bool, search_status_callback)
     rospy.spin()
 
+
+def monitor_process():
+    global proc, mission_status
+    while True:
+        # Если процесс запущен
+        if proc is not None:
+            # poll() возвращает None, если процесс еще работает, 
+            # и код завершения, если процесс завершился
+            if proc.poll() is not None:
+                print("Mission process finished.")
+                mission_status = 'idle'
+                proc = None  # Сбрасываем ссылку, чтобы не проверять старый процесс
+        time.sleep(0.5)  # Проверка каждые полсекунды
+
+
 if __name__ == '__main__':
     threading.Thread(target=ros_listener, daemon=True).start()
+
+    threading.Thread(target=monitor_process, daemon=True).start()
+    
     app.run(host='127.0.10.10', port=5000, debug=False)
