@@ -8,7 +8,6 @@ import threading
 import subprocess
 import time, math
 from aruco_pose.msg import MarkerArray
-import requests as rq
 import logging
 import platform
 from cloverAPI import CloverAPI
@@ -34,6 +33,7 @@ mission_status = 'idle'  # idle | flying | aborted | killed
 search_status = False
 coords = []
 proc = None
+
 
 def navigate_wait(x=0, y=0, z=0, yaw=float('nan'), speed=0.5, frame_id='', auto_arm=False, tolerance=0.2):
     navigate(x=x, y=y, z=z, yaw=yaw, speed=speed, frame_id=frame_id, auto_arm=auto_arm)
@@ -181,6 +181,7 @@ def post_command():
             print(e)
             
     return jsonify({'status': 'ok'})
+
 
 def ros_listener():
     rospy.init_node('web_bridge', anonymous=True, disable_signals=True)
