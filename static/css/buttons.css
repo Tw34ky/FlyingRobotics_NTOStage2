@@ -106,6 +106,35 @@ button:disabled:hover::before {
     animation: pulse 0.3s ease;
 }
 
+/* Home */
+.btn-home {
+    background: linear-gradient(135deg, #6b2496, #a832a4);
+    /* box-shadow: 
+        0 4px 20px rgba(255, 118, 117, 0.4),
+        0 0 20px rgba(214, 48, 49, 0.3); */
+}
+.btn-home:hover {
+    /* box-shadow: 
+        0 8px 30px rgba(255, 118, 117, 0.6),
+        0 0 30px rgba(214, 48, 49, 0.5); */
+    animation: pulse 0.3s ease;
+}
+
+/* Land */
+.btn-land {
+    background: linear-gradient(135deg, #634a1e, #63521e);
+    /* box-shadow: 
+        0 4px 20px rgba(255, 118, 117, 0.4),
+        0 0 20px rgba(214, 48, 49, 0.3); */
+}
+.btn-land:hover {
+    /* box-shadow: 
+        0 8px 30px rgba(255, 118, 117, 0.6),
+        0 0 30px rgba(214, 48, 49, 0.5); */
+    animation: pulse 0.3s ease;
+}
+
+
 @keyframes pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }

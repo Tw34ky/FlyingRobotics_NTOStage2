@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Control Panel - 3D Plotly View</title>
+  <link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet"/>
+  <link href="{{ url_for('static', filename='css/buttons.css') }}" rel="stylesheet"/>
+  <link href="{{ url_for('static', filename='css/background.css') }}" rel="stylesheet"/>
+  <link href="{{ url_for('static', filename='css/battery.css') }}" rel="stylesheet"/>
+  <link href="{{ url_for('static', filename='css/plotly-viewer.css') }}" rel="stylesheet"/>
+  <meta charset="UTF-8">
+        
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+</head>
+<body>
+    <!-- Фон (радуга) -->
+    <div class="h"></div>
+    <div class="v"></div>
+    <script>
+        for (let i = 0; i < 10; i++) {
+            const r = document.createElement('div');
+            r.className = 'rainbow';
+            document.body.appendChild(r);
+        }
+    </script>
+    
+    <!-- Хедер с кнопками -->
+    <div class="header">
+      <h2>🛰️ Мониторинг нефтепровода - ArUco 10×10</h2>
+      <div class="controls">
+        <button class="btn-start" onclick="startMission()">▶️ Старт</button>
+        <button class="btn-stop" onclick="stopMission()">⏹️ Стоп</button>
+        <button class="btn-kill" onclick="kill()">💀 Kill</button>
+        <button class="btn-home" onclick="home()">🏠 Home</button>
+        <button class="btn-land" onclick="land()">⬇️ Land</button>
+        <span id="status" class="status">Статус: idle</span>
+        <div id="battery" class="battery-container battery-good">
+          <div class="battery-icon"><div class="battery-level" id="battery-level"></div></div>
+          <div class="battery-text">
+            <span class="battery-percent" id="battery-percent">100%</span>
+            <span class="battery-voltage" id="battery-voltage">12.6 V</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="three-viewer"></div> 
+    
+    <!-- Легенда и список врезок -->
+    <div class="legend">
+      <div class="legend-item"><span class="legend-color drone-color"></span> Дрон</div>
+      <div class="legend-item"><span class="legend-color tap-color"></span> Врезка</div>
+      <div class="legend-item"><span class="legend-color marker-color"></span> ArUco-маркер</div>
+      <div class="legend-item"><span class="legend-color building-color"></span> Здание</div>
+    </div>
+    
+    <h3>Найденные врезки:</h3>
+    <ul id="taps-list"></ul>
+    
+    <!-- Toast уведомления -->
+    <div id="toast-container"></div>
+
+    <script>
+        // === Глобальные переменные ===
+    let scene, camera, renderer, controls;
+    let mapMesh, tapMeshes = [], buildingMeshes = [];
+    let drone = { x: 0, y: 0, z: 0.5, yaw: 0 };
+    let taps = [];
+    let buildings = [];
+    let markers = [];
+    let status = 'idle';
+    let battery = { voltage: 0, percentage: 100 };
+
+    // === Инициализация Three.js ===
+    function initThreeJS() {
+        const container = document.getElementById('three-viewer');
+        
+        // Сцена
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0f0f1a);
+        
+        // Камера
+        camera = new THREE.PerspectiveCamera(
+            75, 
+            container.clientWidth / container.clientHeight, 
+            0.1, 1000
+        );
+        camera.position.set(8, 8, 6);
+        camera.lookAt(0, 0, 0);
+        
+        // Рендерер
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Контролы
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // Свет
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 5);
+        scene.add(dirLight);
+        
+        // Сетка
+        const gridHelper = new THREE.GridHelper(20, 20, 0x667eea, 0x333355);
+        gridHelper.rotation.x = Math.PI / 2;
+        scene.add(gridHelper);
+        
+        // Оси
+        const axesHelper = new THREE.AxesHelper(2);
+        scene.add(axesHelper);
+        
+        // Анимационный цикл
+        animate();
+    }
+
+    // === Глобальная переменная ===
+    let droneMesh = null;
+
+    // === Создание/обновление дрона ===
+    function updateDrone3D(droneData) {
+        // 1. Создаём модель, если её нет
+        if (!droneMesh) {
+            droneMesh = createDroneModel();
+            scene.add(droneMesh);
+            console.log('✅ Дрон создан в сцене');
+        }
+        
+        // 2. Обновляем позицию (X, Y, Z)
+        droneMesh.position.set(droneData.x, droneData.y, droneData.z || 0.5);
+        
+        // 3. Обновляем ориентацию (Yaw)
+        // В Three.js вращение вокруг оси Z (вертикальной для лежащей модели) соответствует рысканию
+        droneMesh.rotation.z = droneData.yaw;
+        
+        // 4. (Опционально) Наклон при движении
+        // droneMesh.rotation.x = 0.1; 
+    }
+
+    // === Функция создания 3D модели дрона ===
+    function createDroneModel() {
+        const droneGroup = new THREE.Group();
+        
+        // --- 1. Корпус (Центральная часть) ---
+        const bodyGeo = new THREE.BoxGeometry(0.2, 0.2, 0.3);
+        const bodyMat = new THREE.MeshLambertMaterial({ color: 0x007bff });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.z = 0.15; // Приподнимаем над "землёй"
+        droneGroup.add(body);
+        
+        // --- 2. Лучи (Рама) ---
+        const armGeo = new THREE.BoxGeometry(0.05, 0.4, 0.05);
+        const armMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        
+        const arm1 = new THREE.Mesh(armGeo, armMat);
+        arm1.rotation.z = Math.PI / 4; // 45 градусов
+        arm1.position.z = 0.15;
+        droneGroup.add(arm1);
+        
+        const arm2 = new THREE.Mesh(armGeo, armMat);
+        arm2.rotation.z = -Math.PI / 4; // -45 градусов
+        arm2.position.z = 0.15;
+        droneGroup.add(arm2);
+        
+        // --- 3. Пропеллеры (Визуализация) ---
+        const propGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.02, 16);
+        const propMat = new THREE.MeshBasicMaterial({ 
+            color: 0x00cec9, 
+            transparent: true, 
+            opacity: 0.6 
+        });
+        
+        // Позиции моторов (концы лучей)
+        const motors = [
+            { x: 0.15, y: 0.15 }, { x: -0.15, y: -0.15 },
+            { x: 0.15, y: -0.15 }, { x: -0.15, y: 0.15 }
+        ];
+        
+        motors.forEach(pos => {
+            const prop = new THREE.Mesh(propGeo, propMat);
+            prop.position.set(pos.x, pos.y, 0.25);
+            droneGroup.add(prop);
+        });
+        
+        // --- 4. Индикатор направления (Нос дрона) ---
+        // Красная точка спереди, чтобы видеть куда смотрит дрон
+        const noseGeo = new THREE.SphereGeometry(0.05, 8, 8);
+        const noseMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const nose = new THREE.Mesh(noseGeo, noseMat);
+        nose.position.set(0, 0, 0.35); // Спереди по оси Z
+        droneGroup.add(nose);
+        
+        // --- 5. Тень/Маркер под дроном ---
+        const shadowGeo = new THREE.RingGeometry(0.15, 0.2, 16);
+        const shadowMat = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff, 
+            transparent: true, 
+            opacity: 0.3, 
+            side: THREE.DoubleSide 
+        });
+        const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+        shadow.rotation.x = -Math.PI / 2;
+        shadow.position.z = 0.02;
+        droneGroup.add(shadow);
+        
+        // --- Настройка начальной ориентации группы ---
+        // Кладем всю группу горизонтально
+        droneGroup.rotation.x = -Math.PI / 2;
+        
+        return droneGroup;
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    // === Загрузка текстуры карты ===
+    async function loadMapTexture() {
+        try {
+            console.log('📡 Загрузка карты...');
+            const res = await fetch('/map');
+            const data = await res.json();
+            
+            console.log('📦 Данные карты:', data);
+            
+            if (!data.texture || !data.texture_meta) {
+                console.error('❌ Нет текстуры или метаданных');
+                return;
+            }
+            
+            const texture = await createTextureFromBase64(data.texture);
+            console.log('✅ Текстура создана:', {
+                width: texture.image?.width,
+                height: texture.image?.height,
+                needsUpdate: texture.needsUpdate
+            });
+            
+            const { offset_x, offset_y, width_world, height_world } = data.texture_meta;
+            console.log('📐 Метаданные:', {
+                offset_x, offset_y, 
+                width_world, height_world,
+                centerX: offset_x + width_world / 2,
+                centerY: offset_y + height_world / 2
+            });
+            
+            // Создаём геометрию
+            const geometry = new THREE.PlaneGeometry(width_world, height_world);
+            console.log('📐 Геометрия:', {
+                width: geometry.parameters.width,
+                height: geometry.parameters.height
+            });
+            
+            // Материал с отладкой
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture,
+                transparent: true,
+                opacity: 1.0,  // Увеличили opacity
+                side: THREE.DoubleSide,
+                depthTest: true,
+                depthWrite: false
+            });
+            
+            console.log('🎨 Материал:', {
+                transparent: material.transparent,
+                opacity: material.opacity,
+                hasMap: !!material.map
+            });
+            
+            mapMesh = new THREE.Mesh(geometry, material);
+
+            mapMesh.position.set(
+                offset_x + width_world / 2,
+                offset_y + height_world / 2,
+                0.01
+            );
+
+            // Если нужно дополнительно повернуть:
+            mapMesh.rotation.z = 0;  // 0, Math.PI/2, Math.PI, или -Math.PI/2
+
+            // Если текстура зеркальная:
+            mapMesh.scale.y = -1;  // Отразить по Y
+            
+            console.log('🛰️ Mesh:', {
+                position: mapMesh.position,
+                rotation: mapMesh.rotation,
+                visible: mapMesh.visible
+            });
+            
+            scene.add(mapMesh);
+            console.log('✅ Карта добавлена в сцену');
+            console.log('📋 Объекты в сцене:', scene.children.length);
+            
+            // Проверка видимости
+            setTimeout(() => {
+                console.log('🔍 Проверка через 1 сек:', {
+                    inScene: scene.children.includes(mapMesh),
+                    meshVisible: mapMesh.visible,
+                    materialVisible: material.opacity,
+                    cameraPos: camera.position,
+                    cameraLookAt: controls.target
+                });
+            }, 1000);
+            
+        } catch (e) {
+            console.error('❌ Ошибка loadMapTexture:', e);
+            console.error('Stack:', e.stack);
+        }
+    }
+
+    // === Создание текстуры из base64 ===
+    function createTextureFromBase64(base64Data) {
+        return new Promise((resolve, reject) => {
+            // Убедимся, что есть префикс data:image/png;base64,
+            let base64String = base64Data;
+            if (!base64Data.startsWith('data:')) {
+                base64String = `data:image/png;base64,${base64Data}`;
+            }
+            
+            // Создаём изображение через Image API
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';  // Для CORS
+            
+            img.onload = () => {
+                try {
+                    const texture = new THREE.Texture(img);
+                    texture.flipY = false;  // Важно: Three.js инвертирует Y по умолчанию
+                    texture.needsUpdate = true;
+                    texture.minFilter = THREE.LinearFilter;
+                    texture.magFilter = THREE.LinearFilter;
+                    resolve(texture);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+            
+            img.onerror = (err) => {
+                console.error('❌ Ошибка загрузки изображения:', err);
+                reject(err);
+            };
+            
+            // Устанавливаем src — браузер сам декодирует base64
+            img.src = base64String;
+            
+            // Лог для отладки
+            console.log('🖼️ Загрузка текстуры:', {
+                srcLength: base64String.length,
+                startsWith: base64String.substring(0, 50) + '...'
+            });
+        });
+    }
+
+    // === Создание/обновление дрона ===
+    function updateDrone3D(droneData) {
+        if (!droneMesh) {
+            // Корпус дрона (конус)
+            const geometry = new THREE.ConeGeometry(0.15, 0.4, 4);
+            const material = new THREE.MeshLambertMaterial({ 
+                color: 0x007bff,
+                emissive: 0x001a33
+            });
+            droneMesh = new THREE.Mesh(geometry, material);
+            
+            // Пропеллеры (визуализация)
+            const propGeo = new THREE.BoxGeometry(0.3, 0.02, 0.05);
+            const propMat = new THREE.MeshLambertMaterial({ color: 0x00cec9 });
+            const prop1 = new THREE.Mesh(propGeo, propMat);
+            prop1.position.set(0.1, 0, 0.1);
+            droneMesh.add(prop1);
+            
+            const prop2 = new THREE.Mesh(propGeo, propMat);
+            prop2.position.set(-0.1, 0, -0.1);
+            droneMesh.add(prop2);
+            
+            scene.add(droneMesh);
+        }
+        console.log('pulled dronemesh');
+        droneMesh.position.set(droneData.x, droneData.y, droneData.z);
+        droneMesh.rotation.z = droneData.yaw;
+    }
+
+    // === Создание врезок ===
+    function updateTaps3D(tapsData) {
+        // Удаляем старые врезки
+        tapMeshes.forEach(mesh => scene.remove(mesh));
+        tapMeshes = [];
+        
+        tapsData.forEach((tap, index) => {
+            const x = typeof tap === 'object' ? tap.x : tap[0];
+            const y = typeof tap === 'object' ? tap.y : tap[1];
+            const z = typeof tap === 'object' ? (tap.z || 0.05) : 0.05;
+            
+            // Сфера
+            const geometry = new THREE.SphereGeometry(0.12, 16, 16);
+            const material = new THREE.MeshLambertMaterial({ 
+                color: 0xdc3545,
+                emissive: 0x330000
+            });
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.position.set(x, y, z);
+            
+            // Кольцо
+            const ringGeo = new THREE.TorusGeometry(0.18, 0.02, 8, 24);
+            const ringMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.z = 0.01;
+            sphere.add(ring);
+            
+            scene.add(sphere);
+            tapMeshes.push(sphere);
+        });
+    }
+
+    // === Создание зданий ===
+    function updateBuildings3D(buildingsData) {
+        // Удаляем старые здания
+        buildingMeshes.forEach(mesh => scene.remove(mesh));
+        buildingMeshes = [];
+        
+        buildingsData.forEach(building => {
+            const { x, y, width, depth, height, color, opacity, name } = building;
+            
+            const geometry = new THREE.BoxGeometry(width, depth, height);
+            const material = new THREE.MeshLambertMaterial({ 
+                color: new THREE.Color(color || '#667eea'),
+                transparent: true,
+                opacity: opacity !== undefined ? opacity : 0.7
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, height / 2);  // Центр по Z
+            
+            // Добавляем wireframe для красоты
+            const edges = new THREE.EdgesGeometry(geometry);
+            const lineMat = new THREE.LineBasicMaterial({ 
+                color: 0xffffff, 
+                transparent: true, 
+                opacity: 0.3 
+            });
+            const wireframe = new THREE.LineSegments(edges, lineMat);
+            mesh.add(wireframe);
+            
+            scene.add(mesh);
+            buildingMeshes.push(mesh);
+        });
+    }
+
+    // === Загрузка конфига зданий ===
+    async function loadBuildingsConfig() {
+        try {
+            const res = await fetch('/config/buildings.json');
+            buildings = (await res.json()).buildings || [];
+            updateBuildings3D(buildings);
+        } catch (e) {
+            console.warn('Не удалось загрузить конфиг зданий', e);
+        }
+    }
+
+    // === Основная функция обновления данных ===
+    async function updateData() {
+        try {
+            const [droneRes, tapsRes, statusRes, batteryRes] = await Promise.all([
+                fetch('/drone'),
+                fetch('/taps'),
+                fetch('/status'),
+                fetch('/state')
+            ]);
+            
+            // Обновление дрона
+            drone = await droneRes.json();
+            console.log(drone);
+            updateDrone3D(drone);
+            
+            // Обновление врезок
+            taps = await tapsRes.json();
+            updateTaps3D(taps);
+            
+            // Обновление статуса
+            const statusData = await statusRes.json();
+            status = statusData.status || 'unknown';
+            document.getElementById('status').innerText = `Статус: ${status}`;
+            document.getElementById('status').className = `status status-${status}`;
+            // document.getElementById('start').disabled = (status === 'flying');
+            
+            // Обновление батареи
+            const batteryData = await batteryRes.json();
+            battery = {
+                voltage: parseFloat(batteryData.voltage) || 0,
+                percentage: Math.min(100, Math.max(0, parseFloat(batteryData.percentage) || 0))
+            };
+            updateBatteryUI();
+            
+            // Обновление списка врезок
+            updateTapsList();
+            
+        } catch (e) {
+            console.error('❌ Ошибка обновления данных:', e);
+        }
+    }
+
+    // === Обновление UI батареи ===
+    function updateBatteryUI() {
+        const levelEl = document.getElementById('battery-level');
+        const percentEl = document.getElementById('battery-percent');
+        const voltageEl = document.getElementById('battery-voltage');
+        const container = document.getElementById('battery');
+        
+        levelEl.style.width = `${battery.percentage}%`;
+        percentEl.textContent = `${Math.round(battery.percentage)}%`;
+        voltageEl.textContent = `${battery.voltage.toFixed(2)} V`;
+        
+        container.classList.remove('battery-good', 'battery-medium', 'battery-low', 'battery-critical');
+        
+        if (battery.percentage > 50) container.classList.add('battery-good');
+        else if (battery.percentage > 25) container.classList.add('battery-medium');
+        else if (battery.percentage > 10) {
+            container.classList.add('battery-low');
+            if (!window.batteryLowNotified) {
+                showToast(`⚠️ Низкий заряд: ${Math.round(battery.percentage)}%`, 'warning');
+                window.batteryLowNotified = true;
+            }
+        } else {
+            container.classList.add('battery-critical');
+            if (!window.batteryCriticalNotified) {
+                showToast('🔴 КРИТИЧЕСКИЙ ЗАРЯД!', 'danger');
+                window.batteryCriticalNotified = true;
+            }
+        }
+    }
+
+    function resetBatteryNotifications() {
+        if (battery.percentage > 60) {
+            window.batteryLowNotified = false;
+            window.batteryCriticalNotified = false;
+        }
+    }
+
+    function updateTapsList() {
+        const list = document.getElementById('taps-list');
+        list.innerHTML = taps.length === 0 
+            ? '<li>Врезки не обнаружены</li>'
+            : taps.map((t, i) => {
+                const x = typeof t === 'object' ? t.x : t[0];
+                const y = typeof t === 'object' ? t.y : t[1];
+                return `<li><strong>#${i+1}</strong>: (${x.toFixed(2)}, ${y.toFixed(2)}) м</li>`;
+            }).join('');
+    }
+
+    // === Управление слоями ===
+    function toggleLayer(layerName) {
+        const layers = {
+            'map': mapMesh,
+            'drone': droneMesh,
+            'taps': tapMeshes,
+            'buildings': buildingMeshes
+        };
+        
+        const mesh = layers[layerName];
+        if (mesh) {
+            if (Array.isArray(mesh)) {
+                mesh.forEach(m => m.visible = !m.visible);
+            } else {
+                mesh.visible = !mesh.visible;
+            }
+            showToast(`🏢 ${layerName} ${mesh.visible ? 'включено' : 'выключено'}`, 'info');
+        }
+    }
+
+    function resetCamera() {
+        camera.position.set(8, 8, 6);
+        camera.lookAt(0, 0, 0);
+        controls.reset();
+        showToast('🎯 Камера сброшена', 'success');
+    }
+
+    // === Управление миссией ===
+    async function sendCommand(cmd) {
+        try {
+            await fetch('/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: cmd })
+            });
+        } catch (e) {
+            console.error(e);
+            showToast('❌ Ошибка команды', 'danger');
+        }
+    }
+
+    function startMission() { sendCommand('start'); showToast('▶️ Старт', 'success'); }
+    function stopMission()  { sendCommand('stop'); showToast('⏹️ Стоп', 'warning'); }
+    function kill()         { sendCommand('kill'); showToast('💀 Kill', 'danger'); }
+    function home()         { sendCommand('home'); showToast('🏠 Home', 'info'); }
+    function land()         { sendCommand('land'); showToast('⬇️ Land', 'info'); }
+
+    // === Toast уведомления ===
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerHTML = `<span>${type==='success'?'✅':type==='warning'?'⚠️':type==='danger'?'💀':'ℹ️'}</span><span>${message}</span>`;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // === Инициализация при загрузке ===
+    window.addEventListener('load', function() {
+        initThreeJS();
+        loadMapTexture();
+        loadBuildingsConfig();
+        updateData();  // Первый вызов
+        setInterval(updateData, 1000);  // Обновление каждую секунду
+    });
+
+    // === Обработка изменения размера окна ===
+    window.addEventListener('resize', function() {
+        const container = document.getElementById('three-viewer');
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+</script>
+</body>
+</html>

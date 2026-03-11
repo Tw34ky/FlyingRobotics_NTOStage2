@@ -1,0 +1,40 @@
+{
+    "buildings": [
+      {
+        "id": "b1",
+        "x": 2.5,
+        "y": 0.5,
+        "width": 0.5,
+        "depth": 0.5,
+        "height": 1.0,
+        "color": "#c9bd34",
+        "opacity": 0.6
+      },
+      {
+        "id": "b2",
+        "x": 4.5,
+        "y": 0.5,
+        "width": 1.0,
+        "depth": 1.0,
+        "height": 1.0,
+        "color": "#c9bd34",
+        "opacity": 0.6
+      },
+      {
+        "id": "b3",
+        "name": "КПП",
+        "x": 0.5,
+        "y": 8.0,
+        "width": 0.5,
+        "depth": 0.5,
+        "height": 1.5,
+        "color": "#f093fb",
+        "opacity": 0.8
+      }
+    ],
+    "metadata": {
+      "coordinate_frame": "aruco_map",
+      "units": "meters",
+      "z_ground": 0
+    }
+  }

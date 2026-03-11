@@ -20,7 +20,7 @@ class CloverAPI:
     def __new__(cls):
         if not hasattr(cls, 'instance'):
             cls.instance = super(CloverAPI, cls).__new__(cls)
-            rospy.init_node("remote_panel_clover", disable_signals=True)
+            # rospy.init_node("remote_panel_clover", disable_signals=True)
             print("registered")
         return cls.instance
 

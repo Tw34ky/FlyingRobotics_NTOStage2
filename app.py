@@ -146,15 +146,30 @@ def get_status():
 def post_command():
     global mission_status
     cmd = request.json.get('command')
+    
+    print(cmd, mission_status)
+
     if cmd == 'start' and mission_status != 'flying':
         mission_status = 'flying'
-        # def run_mission():
         
         global proc, runner
+        
         proc = subprocess.Popen([runner, "flight/flight.py"], shell=False)
-        # run_mission()
 
     elif cmd == 'stop':
+        mission_status = 'interrupted'
+        try:
+            if proc is not None:  # Проверяем, существует ли процесс
+                proc.kill()
+                proc = None       # Сбрасываем ссылку
+            clover.navigate(x=0, y=0, z=0, frame_id='body')
+        except Exception as e:
+            print(f"Error stopping process: {e}")
+            pass
+
+    elif cmd == 'home':
+
+        # Остановка процесса полета 
         try:
             if proc is not None:  # Проверяем, существует ли процесс
                 proc.kill()
@@ -162,14 +177,15 @@ def post_command():
         except Exception as e:
             print(f"Error stopping process: {e}")
             pass
-        
-        # Возвращаем дрон на базу
-        navigate_wait(x=0.0, y=0.0, z=0.0, frame_id='aruco_map')
-        # Статус изменится на 'idle' автоматически через monitor_process, 
-        # но можно продублировать и здесь для мгновенной реакции UI
+
+        navigate_wait(x=0.0, y=0.0, z=0.0, frame_id='aruco_map') # возвращение на базу
+
         mission_status = 'idle' 
 
     elif cmd == 'kill':
+
+        # Килл свитч
+
         try:
             from mavros_msgs.srv import CommandBool
             arming = rospy.ServiceProxy('mavros/cmd/arming', CommandBool)
@@ -180,6 +196,10 @@ def post_command():
         except Exception as e:
             print(e)
             
+    elif cmd == 'land' and mission_status == 'interrupted':
+        clover.land() # Приземление 
+
+
     return jsonify({'status': 'ok'})
 
 

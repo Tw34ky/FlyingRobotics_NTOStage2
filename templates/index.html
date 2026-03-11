@@ -22,8 +22,15 @@
       <h2>🛰️ Мониторинг нефтепровода - ArUco 10×10</h2>
       <div class="controls">
         <button id="start" class="btn-start" onclick="startMission()">▶️ Старт</button>
+
         <button id="stop" class="btn-stop" onclick="stopMission()">⏹️ Стоп</button>
+
         <button id="kill" class="btn-kill" onclick="kill()">💀 Kill</button>
+
+        <button id="home" class="btn-home" onclick="home()">🏠 Home</button>
+
+        <button id="land" class="btn-land" onclick="home()">⬇️ Land</button>
+
         <span id="status" class="status">Статус: idle</span>
 
         <div id="battery" class="battery-container battery-good" title="Заряд батареи">
@@ -61,7 +68,7 @@
       
       let drone = { x: 0, y: 0, yaw: -1.57 };
       let taps = [];                   // [{x, y}, ...]
-      let route = [];                  // [{x, y}, ...]
+      // let route = [];                  // [{x, y}, ...]
       let status = 'idle';
       let markers = [];   // [{id, x, y, z, length}, ...]
 
@@ -151,20 +158,20 @@
           ctx.fillText(`#${m.id}`, center.x, center.y);
         });
 
-        // ▶️ Draw route (if any)
-        if (route.length > 1) {
-          ctx.strokeStyle = '#00FF00'; // green
-          ctx.lineWidth = 7;
-          ctx.beginPath();
-          route.forEach((pt, i) => {
-            const p = toPx(pt.x, pt.y);
-            if (i === 0) ctx.moveTo(p.x, p.y);
-            else ctx.lineTo(p.x, p.y);
-          });
-          ctx.stroke();
-        }
+        // // ▶️ Draw route (if any)
+        // if (route.length > 1) {
+        //   ctx.strokeStyle = '#00FF00'; // green
+        //   ctx.lineWidth = 7;
+        //   ctx.beginPath();
+        //   route.forEach((pt, i) => {
+        //     const p = toPx(pt.x, pt.y);
+        //     if (i === 0) ctx.moveTo(p.x, p.y);
+        //     else ctx.lineTo(p.x, p.y);
+        //   });
+        //   ctx.stroke();
+        // }
 
-        // 🔴 Draw taps
+        // Draw taps
         ctx.fillStyle = '#dc3545';
         taps.forEach(t => {
           // Assuming t is {x, y} or just [x, y, z...]
@@ -455,7 +462,9 @@
       function startMission() { sendCommand('start'); }
       function stopMission()  { sendCommand('stop'); }
       function kill()         { sendCommand('kill'); }
-      
+      function home()         { sendCommand('home'); }
+      function land()         { sendCommand('land') }
+
       // --- Инициализация ---
       drawMap();
       setInterval(update, 100);

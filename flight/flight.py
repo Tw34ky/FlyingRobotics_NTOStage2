@@ -1,5 +1,5 @@
 import rospy
-rospy.init_node('flight')
+# rospy.init_node('flight')
 import math
 import numpy as np
 from clover import srv
